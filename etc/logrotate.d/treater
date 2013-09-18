@@ -1,0 +1,9 @@
+/var/log/treater/*.log {
+  rotate 7
+  daily
+  compress
+  missingok
+  notifempty
+}
+
+

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Misha's Treat Feeder</title>
+    <link href="css/ui-darkness/jquery-ui-1.10.3.custom.css" rel="stylesheet">
+    <script src="js/jquery-1.9.1.js"></script>
+    <script src="js/jquery-ui-1.10.3.custom.js"></script>
+    <script>
+    $(function() {
+
+        $( "#dialog-message" ).dialog({
+            autoOpen: false,
+            width: 400,
+            modal: true,
+            buttons: {
+                Ok: function() {
+                    $( this ).dialog( "close" );
+                }
+            }
+        });
+        
+        $( "#treatCamVideo" ).button();
+        $( "#capturePhoto" ).button();
+        $( "#dispenseTreat" ).button();
+        $( "#resizable" ).resizable({ aspectRatio: true });
+    });
+
+    displayedCapture = ""
+
+	function updateStatus(){
+		$.getJSON("api/getStatus", function(status){
+            processStatusUpdate(status)});
+	}
+	
+    function processStatusUpdate(status){
+        $("#numTreatsInLast24Hours").html(status.numTreatsInLast24Hours);
+		if (status.lastTreat && status.lastTreat != 'None')
+			$("#lastTreat").html(new Date(status.lastTreat).toLocaleString());				
+		else 
+			$("#lastTreat").html("Not available");	
+		$("#machineState").html(status.machineState);
+		if (status.captureTime && status.captureTime != "None")
+			$("#captureTime").html(new Date(status.captureTime).toLocaleString());
+		else
+			$("#captureTime").html("Not available");
+        if (displayedCapture == "" && status.capturePath && status.capturePath != "") {
+            updateCapture(status.capturePath);            
+        }
+    }
+
+	function dispenseTreat(){
+		var request = $.ajax({
+			type: "POST",
+			url: "/api/dispenseTreat",
+			dataType: "json"
+		});
+		
+		request.done(function(response) {
+            processStatusUpdate(response);
+		});
+		
+		request.fail(function(jqXHR, textStatus){
+            $( "#dialog-message" ).dialog( "open" );
+
+		});
+	}
+	
+	function treatCamVideo() {
+		var request = $.ajax({
+			type: "GET",
+			url: "/api/getVideoStreamUrl",
+			dataType: "json"
+		});
+
+		request.done(function(response) {
+    		updateCapture(response.videoStreamUrl);
+		});
+		
+		request.fail(function(jqXHR, textStatus){
+			alert("Error enabling camera video: " + textStatus);
+		});
+	}
+	
+	function updateCapture(capturePath) {
+        if (displayedCapture != capturePath) {
+    		$("#treatCam").attr('src', capturePath);
+            displayedCapture = capturePath;
+        }
+	}
+	
+	function capturePhoto() {
+		var request = $.ajax({
+			type: "POST",
+			url: "/api/capturePhoto",
+			dataType: "json"
+		});
+	
+		request.done(function(response) {
+			updateCapture(response.capturePath);
+		});
+	
+		request.fail(function(jqXHR, textStatus){
+			alert("Error capturing camera image: " + textStatus);
+		});
+	}
+
+	$(document).ready(function(){
+		$("#dispenseTreat").click(dispenseTreat);
+		$("#treatCamVideo").click(treatCamVideo);
+		$("#capturePhoto").click(capturePhoto);
+		updateStatus();
+		setInterval('updateStatus()',4000);
+	});
+    </script>
+    <style>
+    body { font: 100% "Trebuchet MS", sans-serif; margin: 50px; }
+    #resizable { width: 100%; padding: 0.5em; }
+    #resizable img { width: 100%; height: 100% }
+    </style>
+</head>
+<body>
+<center>
+<h1>Misha's Treat Feeder</h1>
+<div id="dialog-message" title="Dispense Treat">
+  <p>
+    <span class="ui-icon ui-icon-alert" style="float: left; margin: 0 7px 50px 0;"></span>
+    There was a problem dispensing a treat. 
+  <p>
+    Typically this is because the treat machine requires 60 seconds to recover from a treat cycle, 
+    and you have requested to dispense a treat too soon.
+  </p>
+</div>
+<table>
+	  <tr style="height: 30px">
+        <td>Last treat time:</td>
+        <td><b><div id="lastTreat"></div></b></td>
+        <td align="right"><button id="dispenseTreat">Dispense</button></td>
+      </tr>
+	  <tr style="height: 30px">
+        <td>Treats in last 24 hours:</td>
+        <td><b><div id="numTreatsInLast24Hours"></div></b></td>
+        <td align="right"><button id="capturePhoto">TreatCam Photo</button></td>
+      </tr>
+	  <tr style="height: 30px">
+        <td>Machine state:</td>
+        <td><b><div id="machineState"></div></b></td>
+        <td align="right"><button id="treatCamVideo">TreatCam Video</button></td>
+      </tr>
+	  <tr><td colspan="3">
+        <div id="resizable" class="ui-widget-content">
+            <img id="treatCam" src="/captures/empty.jpg" border=1 alt="TreatCam photo">
+        </div>
+      </td></tr>
+	  <tr>
+        <td align="center" colspan="3"><font size=-3><i><div id="captureTime"></div></i></font></td>
+      </tr>
+</table>
+</center>
+</body>
+</html>
+

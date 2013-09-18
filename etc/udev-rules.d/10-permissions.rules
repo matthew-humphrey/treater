@@ -1,0 +1,3 @@
+SUBSYSTEM=="vchiq",GROUP="video",MODE="0660"
+KERNEL=="gpio*", SUBSYSTEM=="gpio", ACTION=="add", PROGRAM="/usr/local/bin/gpio-perm gpio /sys%p"
+

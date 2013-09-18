@@ -1,0 +1,144 @@
+Initial Set-up
+	Image SD card using the latest Raspian image and WIn32DiskImager program. I was using Occidentalis, but it is not kept up-to-date, and it doesn’t add anything that you can’t install on Raspbian later.
+	Boot and log in: pi / raspberry
+	Run raspi-config (should come up on its own or use sudo raspi-config)
+		Expand file system
+		Enable camera
+		Set locale: en-us (UTF-8)
+		Set keyboard map to US
+		Set timezone
+		Overclock if desired
+		Change pi password (or delete account later)
+	
+Add a new user
+	sudo adduser user
+	
+	Add account to sudo list:
+		sudo visudo
+	
+Update the system
+	Update the package list:
+		sudo apt-get update
+	
+	Update the distribution:
+		sudo apt-get upgrade
+		
+Update the firmware:
+	sudo apt-get install rpi-update
+	sudo rpi-update
+	
+Configure WiFi (if applicable):
+	sudo nano /etc/network/interfaces
+	
+	Mine looks as follows (bold items are relevant):
+	
+		auto lo
+		
+		iface lo inet loopback
+		
+		iface eth0 inet dhcp
+		
+		auto wlan0
+		allow-hotplug wlan0
+		iface wlan0 inet manual
+		        wpa-roam /etc/wpa_supplicant/wpa_supplicant.conf
+		
+		iface default inet dhcp
+	
+	Create or edit wpa_supplicant.conf:
+		sudo nano /etc/wpa_supplicant/wpa_supplicant.conf
+	
+	Contents of this are as follows:
+	
+		ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+		update_config=1
+		
+		network={
+		        ssid="YOUR_AP_SSID"
+		        scan_ssid=1
+		        proto=RSN
+		        key_mgmt=WPA-PSK
+		        pairwise=CCMP
+		        auth_alg=OPEN
+		        psk="your_wpa2_key"
+		}
+		
+	This will set things up for WPA-2. If you need something else, Bing for it.
+	
+Non-root access to raspberry pi camera
+	Add users to video group:
+		sudo usermod -aG video user
+	
+	Create udev rule to set permission of vchiq device:
+		sudo echo 'SUBSYSTEM=="vchiq",GROUP="video",MODE="0660"' > /etc/udev/rules.d/10-permissions.rules
+
+Enable access to serial port:
+	The serial port device is /dev/ttyAMA0. The main issue is that the OS has a console attached to it, so it isn't available for user-space programs to use. To change this, we need to update the kernel command line. Make a back-up of /boot/cmdline.txt:
+		sudo cp /boot/cmdline.txt /boot/cmdline_backup.txt
+	
+	Then edit the file:
+		sudo nano /boot/cmdline.txt
+	
+	Delete the following strings and save the file:
+		console=ttyAMA0,115200 
+		kgdboc=ttyAMA0,115200
+	
+	Then remove the reference to this device from /etc/inittab:
+		sudo nano /etc/inittab
+		
+	Comment out or remove this line:
+		T0:23:respawn:/sbin/getty -L ttyAMA0 115200 vt100
+	
+	Add user to group (dialout) that has access to /dev/ttyAMA0 (not strictly sure this is needed):
+		sudo usermod -aG dialout user
+
+If using the Edimax or other 8192cu module
+	You can check which USB network device is there by running this command:
+		lsusb
+	
+	For the two different adapters I have, here is what was displayed:
+		? Bus 001 Device 004: ID 7392:7811 Edimax Technology Co., Ltd EW-7811Un 802.11n Wireless Adapter [Realtek RTL8188CUS]
+		? Bus 001 Device 002: ID 0bda:8176 Realtek Semiconductor Corp. RTL8188CUS 802.11n WLAN Adapter
+	
+	You can see they are both using the same chip: RTL8188CUS. The driver for this is 8192cu. 
+	
+	This OS/driver will put the device in low power mode if it is idle long enough. This is a PITA because it prevents you from SSH into the Pi. Since I typically am using a Pi in a headless configuration, this just won't do. To fix this, we need to tell the driver to disable power management. How you do this depends on whether it is loaded as a module or compiled in the kernel. You can tell by running this command:
+		lsmod
+	
+	If you see "8192cu" in the list of loaded modules,  then the driver is loaded as a module. If not, then it is either compiled in the kernel, or you have a different network adapter.
+	
+	You can confirm that power management is enabled by running this command:
+		cat /sys/module/8192cu/parameters/rtw_power_mgnt
+	
+	A value of "0" means power management is disabled. "1" means minimum power management and "2" means max power management.
+	
+	If loaded as a module, create or edit a module configuration file in /etc/modprobe.d:
+		sudo nano /etc/modprobe.d/8192cu.conf
+	
+	Add the following lines:
+		# Disable power management
+		options 8192cu rtw_power_mgnt=0 rtw_enusbss=0 
+		
+	If compiled in the kernel:
+		Add the following string to /boot/cmdline.txt:
+			8192cu.rtw_power_mgnt=0 8192cu.rtw_enusbss=0 
+	
+Install Python serial port library
+	sudo apt-get install python-pip
+	sudo pip pyserial
+	
+Install Python Imaging Toolkit
+	sudo aptitude install python-imaging-tk
+	
+Set hostname
+	sudo nano /etc/hostname
+	
+Reboot
+	sudo reboot
+	
+Install Application
+	• Extract the source into the root of the home directory for the user you created to run the service. 
+	• Create a directory, treater, under /var/log/. Change owner and group to user.user where user is the user you created to run the service under. Make sure to set permissions to this directory so that only this user has access (otherwise logrorate will complain).
+	• In the setup directory, are several files that you can use as examples to set up logrotate, an init script, and udev. 
+
+Install Twisted (see http://twistedmatrix.com/trac)
