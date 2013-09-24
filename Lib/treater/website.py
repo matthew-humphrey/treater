@@ -31,19 +31,15 @@ class TreatWebConfig:
     SECTION_NAME = "web"
 
     def __init__(self, config = None):
-        self.docroot = path.join(getcwd(), "htdocs")
-        self.captureDir = path.join(getcwd(), "captures")
+        self.capturePath = path.join(getcwd(), "/captures")
         self.port = 8000
         if config:
             self.load(config)
 
     def load(self, config):
         sec = TreatWebConfig.SECTION_NAME
-        self.docroot = config.get(sec, "docroot")        
-        self.captureDir = config.get(sec, "captureDir")
+        self.capturePath = config.get(sec, "capturePath")
         self.port = config.getint(sec, "port")
-        self.username = config.get(sec, "username")
-        self.password = config.get(sec, "password")
 
 class TreatWeb:
     def __init__(self, reactor, machine, camera, config):
@@ -52,25 +48,15 @@ class TreatWeb:
         self.machine = machine
         self.camera = camera
 
-        root = File(self.config.docroot)
-        captures = File(self.config.captureDir)
-        root.putChild("captures", captures)
-        videoProxy = ReverseProxyResource("localhost", self.camera.getLocalVideoStreamPort(), "", reactor)
-        root.putChild("video", videoProxy)
+        root = Resource()
         api = Resource()
-        api.putChild("getStatus", ApiGetStatus(machine, camera))
-        api.putChild("capturePhoto", ApiCapturePhoto(machine, camera))
-        api.putChild("dispenseTreat", ApiDispenseTreat(machine, camera))
-        api.putChild("getVideoStreamUrl", ApiGetVideoStreamUrl(machine, camera))
+        api.putChild("getStatus", ApiGetStatus(config, machine, camera))
+        api.putChild("capturePhoto", ApiCapturePhoto(config, machine, camera))
+        api.putChild("dispenseTreat", ApiDispenseTreat(config, machine, camera))
+        api.putChild("getVideoStreamUrl", ApiGetVideoStreamUrl(config, machine, camera))
         root.putChild("api", api)
 
-        checker = PasswordDictChecker({self.config.username: self.config.password})
-        realm = HttpPasswordRealm(root)
-        p = portal.Portal(realm, [checker])
-        credentialFactory = DigestCredentialFactory("md5", "MKMC")
-        protected_root = HTTPAuthSessionWrapper(p, [credentialFactory])
- 
-        site = Site(protected_root)
+        site = Site(root)
         reactor.listenTCP(self.config.port, site)
  
 def datetimeToJsonStr(dt):
@@ -81,7 +67,8 @@ def datetimeToJsonStr(dt):
 class ApiResource(Resource):
     jsonContentType = b"application/json"
 
-    def __init__(self, machine, camera):
+    def __init__(self, config, machine, camera):
+        self.config = config
         self.machine = machine
         self.camera = camera
         self.isLeaf = True
@@ -89,7 +76,7 @@ class ApiResource(Resource):
     def makeCapturePath(self, capture):
         if not capture:
             return ""
-        return "/captures/" + capture
+        return path.join(self.config.capturePath,capture)
 
     def getLastCapturePath(self):
         capture = self.camera.getLastCaptureName()
@@ -114,8 +101,8 @@ class ApiResource(Resource):
 
 
 class ApiGetStatus(ApiResource):
-    def __init__(self, machine, camera):
-        ApiResource.__init__(self, machine, camera)
+    def __init__(self, config, machine, camera):
+        ApiResource.__init__(self, config, machine, camera)
 
     def render_GET(self, request):
         request.defaultContentType = ApiResource.jsonContentType
@@ -123,18 +110,17 @@ class ApiGetStatus(ApiResource):
         return result
 
 class ApiGetVideoStreamUrl(ApiResource):
-    def __init__(self, machine, camera):
-        ApiResource.__init__(self, machine, camera)
+    def __init__(self, config, machine, camera):
+        ApiResource.__init__(self, config, machine, camera)
 
     def render_GET(self, request):
         request.defaultContentType = ApiResource.jsonContentType
-        # result = json.dumps({"videoStreamUrl" : self.camera.getVideoStreamUrl(request.getRequestHostname())})
         result = json.dumps({"videoStreamUrl" : "/video"})
         return result
 
 class ApiCapturePhoto(ApiResource):
-    def __init__(self, machine, camera):
-        ApiResource.__init__(self, machine, camera)
+    def __init__(self, config, machine, camera):
+        ApiResource.__init__(self, config, machine, camera)
 
     def render_POST(self, request):
         LOGGER.info("Camera capture request from web")
@@ -160,8 +146,8 @@ class ApiCapturePhoto(ApiResource):
         request.finish()
 
 class ApiDispenseTreat(ApiResource):
-    def __init__(self, machine, camera):
-        ApiResource.__init__(self, machine, camera)
+    def __init__(self, config, machine, camera):
+        ApiResource.__init__(self, config, machine, camera)
 
     def render_POST(self, request):
         LOGGER.info("Treat dispense request from web")
@@ -171,36 +157,4 @@ class ApiDispenseTreat(ApiResource):
             return "Treat machine is busy. Please allow 60 seconds between treat dispense requests"
         request.defaultContentType = ApiResource.jsonContentType
         return json.dumps(self.getStatus())
-
-
-class PasswordDictChecker:
-    implements(checkers.ICredentialsChecker)
-    credentialInterfaces = (credentials.IUsernamePassword,credentials.IUsernameHashedPassword)
- 
-    def __init__(self, passwords):
-        self.passwords = passwords
- 
-    def requestAvatarId(self, credentials):
-        username = credentials.username
-        if self.passwords.has_key(username):
-            if credentials.checkPassword(self.passwords[username]):
-                return defer.succeed(username)
-            else:
-                return defer.fail(
-                    credError.UnauthorizedLogin("Unauthorized login"))
-        else:
-            return defer.fail(
-                credError.UnauthorizedLogin("Unauthorized login"))
- 
-class HttpPasswordRealm(object):
-    implements(portal.IRealm)
- 
-    def __init__(self, myresource):
-        self.myresource = myresource
-    
-    def requestAvatar(self, user, mind, *interfaces):
-        if IResource in interfaces:
-            # myresource is passed on regardless of user
-            return (IResource, self.myresource, lambda: None)
-        raise NotImplementedError()
 
