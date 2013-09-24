@@ -10,6 +10,7 @@ from logging import getLogger
 from twisted.web.server import Site, NOT_DONE_YET
 from twisted.web.static import File
 from twisted.web.resource import Resource, IResource
+from twisted.web.proxy import ReverseProxyResource
 from twisted.internet import defer
 from zope.interface import implements
 from twisted.cred import portal, checkers, credentials, error as credError
@@ -49,11 +50,13 @@ class TreatWeb:
         self.config = config
         self.reactor = reactor
         self.machine = machine
-        self. camera = camera
+        self.camera = camera
 
         root = File(self.config.docroot)
         captures = File(self.config.captureDir)
         root.putChild("captures", captures)
+        videoProxy = ReverseProxyResource("localhost", self.camera.getLocalVideoStreamPort(), "", reactor)
+        root.putChild("video", videoProxy)
         api = Resource()
         api.putChild("getStatus", ApiGetStatus(machine, camera))
         api.putChild("capturePhoto", ApiCapturePhoto(machine, camera))
@@ -125,7 +128,8 @@ class ApiGetVideoStreamUrl(ApiResource):
 
     def render_GET(self, request):
         request.defaultContentType = ApiResource.jsonContentType
-        result = json.dumps({"videoStreamUrl" : self.camera.getVideoStreamUrl(request.getRequestHostname())})
+        # result = json.dumps({"videoStreamUrl" : self.camera.getVideoStreamUrl(request.getRequestHostname())})
+        result = json.dumps({"videoStreamUrl" : "/video"})
         return result
 
 class ApiCapturePhoto(ApiResource):

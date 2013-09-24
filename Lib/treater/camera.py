@@ -107,6 +107,9 @@ class TreatCam:
                     if not d.called:
                         d.callback(capture)
 
+    def getLocalVideoStreamPort(self):
+        return self.config.motionStreamPort
+
     def getVideoStreamUrl(self, webhost):
         url = "http://%s:%d/" % (webhost, self.config.motionStreamPort)
         return url
