@@ -1,0 +1,55 @@
+#!/usr/bin/perl
+#########################################################################################
+# Description:  UDEV export pin handler - PArt of HiPi Perl Module distribution
+# Created       Tue Mar 05 17:06:44 2013
+# svn id        $Id:$
+# Copyright:    Copyright (c) 2013 Mark Dootson
+# Licence:      This work is free software; you can redistribute it and/or modify it 
+#               under the terms of the GNU General Public License as published by the 
+#               Free Software Foundation; either version 3 of the License, or any later 
+#               version.
+#########################################################################################
+
+use 5.14.0;
+use strict;
+use warnings;
+
+our $VERSION ='0.32';
+
+my( $group, $pinpath ) = @ARGV;
+
+given( $pinpath ) {
+    when( m/gpiochip\d+$/) {
+        update_export_perm('/sys/class/gpio');
+    }
+    when( m/gpio\d+$/) {
+        update_pin_perm($pinpath);
+    }
+    default {
+        # be silent
+    }
+}
+
+sub update_export_perm {
+    my $rootpath = shift;
+    my ($name,$passwd,$gid,$members) = getgrnam($group);
+    for my $file (qw( export unexport ) ) {
+        my $filepath = qq($rootpath/$file);
+        chmod(0220, $filepath);
+        chown(-1, $gid, $filepath);
+    }
+}
+
+sub update_pin_perm {
+    my $rootpath = shift;
+    my ($name,$passwd,$gid,$members) = getgrnam($group);
+    chmod(0775, $rootpath);
+    chown(-1, $gid, $rootpath);
+    for my $file (qw( direction edge value active_low ) ) {
+        my $filepath = qq($rootpath/$file);
+        chmod(0664, $filepath);
+        chown(-1, $gid, $filepath);
+    }
+}
+
+1;
