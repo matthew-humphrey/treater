@@ -1,6 +1,6 @@
 /var/log/treater/*.log {
-  rotate 7
-  daily
+  rotate 4
+  weekly
   compress
   missingok
   notifempty

@@ -1,5 +1,185 @@
-Initial Set-up
-	Image SD card using the latest Raspian image and WIn32DiskImager program. I was using Occidentalis, but it is not kept up-to-date, and it doesn’t add anything that you can’t install on Raspbian later.
+I am updating this file on request, but it has been 3 years since I worked on this
+project, and my memory is a bit hazy, so details may be missing or in error.
+- Matthew Humphrey
+
+Requirements / Pre-requisites
+
+	Hardware
+		* Super Feeder pet feeding machines (great company) - http://super-feeder.com/
+		* Raspberry Pi - http://www.raspberrypi.org/
+		* Edimax WiFi module for Raspberry Pi. I had lots of issues with the Edimax 
+		  dropping the WiFi connection. There may be better alternatives now.
+		* Microsoft LifeCam (Any number of USB webcams will work)
+		* Raspberry Pi breadboard PCB - http://www.adafruit.com/products/1148
+		* N-channel MOSFET, diode, optocoupler, wires, mini-din socket, micro-usb cable, 
+		  and some passive components to make a circuit to control power to the treat feeder.
+		  If you are not comfortable with electronics, I would look into using an 
+		  off-the-shelf Solid State Relay (SSR) instead. 
+		* 2 line x 16 character serial LCD - https://www.parallax.com/product/27977.
+		* A custom "Treat detector" circuit. This is something of my own design, and consists
+		  of a 555 timer, some passives, and a small (2.5 cm) piezoelectric disc. The 
+		  piezoelectric disc is used to detect the impact of treats hitting the dispensing
+		  bowl. The 555 timer and other circuitry turn this into pulses that are fed
+		  into one of the Raspberry Pi GPIO ports. This allows the software to count the
+		  treats that are dispensed. 
+
+	Software
+		* Raspbian OS
+		  https://www.raspberrypi.org/downloads/
+		  http://www.raspbian.org/
+		* Raspberry PI GPIO support. I was unable to get the simple Python-enabled
+		  GPIO library to work as non-root, so I installed this 3rd-party package
+		  that sets up sysfs entries for GPIO, and then enabled non-root access
+		  with a UDEV rule. I am sure the situation has improved since I did all this,
+		  so you'll probably want to go another route.
+		* Motion - software that detects motion in a camera and captures an image.
+		  At the time I created this project, there was a supported version of this
+		  software for the Raspberry Pi. There may be better alternatives now. All that 
+		  is needed is some software to capture images from a USB webcam, and write
+		  those images to a configured directory if motion is detected.
+		  http://www.lavrsen.dk/foswiki/bin/view/Motion/
+		* Nginx HTTP Server and Reverse Proxy server. Python makes for a terrible web
+		  server. Late in the project, I added Nginix to serve all my static content, and
+		  to proxy only those requests requiring dynamic content through to Python. Nginix
+		  can also be used to provide HTTPS, and to require the user to authenticate,
+		  so that you have some level of security.
+		  http://nginx.org/
+		* Python. I don't remember if it was 2.7 or 3.0.
+		* Python serial library (pyserial - install with pip)
+		* Python Imaging Toolkit - install with apt.
+		* Twisted - An event driven framework for Python. I migrated to this after 
+		  experiencing horrible performance and lock-ups with the Python web library. 
+		  Possibly it is not needed after adding Nginx, but the code included in the 
+		  project is all using it. 
+		  http://twistedmatrix.com/trac
+
+Basic Set-up for a Noob
+
+	* Set up the Raspberry Pi SDCard image, following the instructions available on numerous web sites.
+	  I am not a big fan of the "Noobs" distro on the RPi site, and recommend using Raspbian 
+	  instead.
+	* Set up networking on the Raspberry Pi, either wired ethernet or Wifi.
+	* Install Motion, and get it working to capture images from your USB web cam.
+	* If necessary, install the Raspberry Pi GPIO library for Python. Write a small program
+	  to interact with GPIO. Make sure this program can run as non-root user, because you will
+	  most likely want this later so that you don't have some service sitting on the Internet
+	  with root access to the Pi. There is an included UDEV rule that should help with this,
+	  but things may have changed over the last 3 years, and so it may or may not work. 
+	* Install the Python serial port library. Connect your LCD to the RPi, and write some text
+	  to it using a Python programming. By default, the RPi uses the default serial port on the
+	  RPi for the Linux Console. Instructions are available on the RPi site on how to disable
+	  that, so that the device is available for your use.
+	* Install Nginx. Read the docs, learn the basics.
+	* Install Twisted, go through the tutorials, learn the basics.
+
+Treater Web App Configuration
+
+    The treater app consists of some Python modules, and some static HTML content. I have
+    the app set up to run as a user named "treat". All the python modules and static HTML
+    content reside within this user's home directory. The user does not have access to
+    anything else, and has logon rights denied. This provides a little extra security
+    over having everything running as root.
+
+    Within this home directory (/home/treat), the folder structure is as follows:
+
+    	captures/
+    	htdocs/
+    		css
+    		images/
+    		js/
+    	treater/
+
+    The "captures" folder contains images captured by the Motion daemon. 
+    The "htdocs" folder contains all the static HTML content, serviced by Nginx.
+    The "treater" folder contains all the Python modules. 
+
+    Note that the directory structure in the GitHub repo is not identical to this. In
+    other words, you will need to create the user, create the directory structure, and
+    copy some files to the appropriate places to get this all working.
+			
+    There is an init.d script, named "treater" that runs Python on the treater
+    script when the system starts. This daemon process is responsible for all
+    dynamic content on the web site. The configuration file for this application,
+    treater.cfg, lives in /etc. This file, which is fairly well commented, tells
+    the script what network (TCP) port it should listen on, where to look for
+    capture files, etc. 
+
+    Nginx is configured to server the static content, and to proxy all requests
+    with /api/ in the path to the treater app, on localhost at the configured port
+    (8000). It is also configured to proxy any requests to /video to localhost port
+    8002. Motion has been configured to serve "video" (really low frame rate video)
+    on this port. This is how the live view works.
+
+Treater Web App - Python Module overview
+
+   	__init__.py
+   		Global initialization for the treater package. Tells Python that this folder 
+   		is a package/module.
+
+   	__main__.py
+   		Main entry point for the application.
+
+   	camera.py
+   		This module abstracts the interface to the Motion captures. It implements a
+   		class, TreatCam, that provides methods to:
+   			- Trigger a capture on-demand
+   			- Prune old capture files from the capture directory
+   			- Determine the latest captured image file
+   			- Return the date/time of the latest capture
+
+   	gpiosys.py
+   	    This is my wrapper around the /dev sysfs GPIO mechanism mentioned above.
+   	    You'll probably want to rewrite this to use something more up to date.
+
+   	history.py
+   	    This module captures the treat dispensing history into a file that
+   	    persists across reboots. 
+
+   	machine.py
+   	    This module implements classes that abstract all control of the treat
+   	    dispensing machine. It implements a finite state machine to manage the 
+   	    treat dispensing cycle (the machine I was using had a period after 
+   	    dispensing in which another treat could not be dispensed). It has methods
+   	    to dispense a treat, to detect if the manual dispense button was pressed,
+   	    and to update the LCD (using the class in seriallcd.py).
+
+   	raspicam.py
+   	    This is a holdover from the previous version of the app - ignore. In case
+   	    you are interested, I initially was using the Raspberry Pi cam, but 
+   	    discovered that the software for it was a complete and total piece of
+   	    garbage, rendering the camera next to useless. That's when I switched to
+   	    the USB cam and started using Motion. You can probably still find my
+   	    forum thread up on raspberrypi.org, in which I really ticked off the 
+   	    RaspiCam guy :)
+
+   	seriallcd.py
+   	    Abstracts the interface to the serial LCD.
+
+    website.py
+        This module contains all the entry points for web calls that come from
+        Nginx. For example, when you use the web UI to trigger a treat, the
+        web page references a URL ending in /api/dispensetreat. Nginix proxies
+        this to the Python app that is running in the background. This goes
+        through the Twisted framework, and ends up in the class ApiDispenseTreat,
+        method render_POST. If you look at that code, you can see that it calls
+        a method in the TreatMachine class (in machine.py) called dispenseTreat.
+        This method either dispenses a treat, or returns an error indicating
+        that the machine is still recovering from a previous dispense cycle.
+
+
+================================ OLD INFO ==========================================
+Everything below this line is from my V1 version of this app, before I made many 
+changes. Some parts are still relevent, others are out of date.
+================================ OLD INFO ==========================================
+
+
+Initial Set-up     
+
+	Set up Raspberry Pi.  I was using Occidentalis, but it is not kept up-to-
+	date, and it doesn’t add anything that you can’t install on Raspbian
+	later. So I would just recommend using Raspbian. Instructions are on the
+	Raspberrypi.org site.
+
 	Boot and log in: pi / raspberry
 	Run raspi-config (should come up on its own or use sudo raspi-config)
 		Expand file system

@@ -1,10 +1,10 @@
-server {
+server {	
+	listen 443;
+	ssl on;
+	ssl_certificate /etc/nginx/server.crt;
+	ssl_certificate_key /etc/nginx/server.key;
+	server_name INSERT_YOUR_SITE_DOMAIN_HERE;
 
-	server_name localhost treater treater.home.mkmc.net mkmc.net;
-
-	satisfy any;
-	allow 192.168.1.0/24;
-	deny all;
 	auth_basic "Private Site";
 	auth_basic_user_file .htpasswd;
 

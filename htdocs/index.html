@@ -40,10 +40,6 @@
 		else 
 			$("#lastTreat").html("Not available");	
 		$("#machineState").html(status.machineState);
-		if (status.captureTime && status.captureTime != "None")
-			$("#captureTime").html(new Date(status.captureTime).toLocaleString());
-		else
-			$("#captureTime").html("Not available");
         if (displayedCapture == "" && status.capturePath && status.capturePath != "") {
             updateCapture(status.capturePath);            
         }
@@ -152,9 +148,6 @@
             <img id="treatCam" src="/captures/empty.jpg" border=1 alt="TreatCam photo">
         </div>
       </td></tr>
-	  <tr>
-        <td align="center" colspan="3"><font size=-3><i><div id="captureTime"></div></i></font></td>
-      </tr>
 </table>
 </center>
 </body>
